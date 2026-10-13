@@ -178,12 +178,17 @@ def preview(image, polygons, matrix, t, path):
 
 def main():
     parser=argparse.ArgumentParser(description=__doc__)
-    parser.add_argument('--gds',type=Path,default=Path('Marker_4x4_new.gds'))
-    parser.add_argument('--images',type=Path,default=Path('pictures'))
-    parser.add_argument('--session',type=Path,default=Path('aligned_images.lys'),help='Session template; its image poses are ignored')
+    parser.add_argument('--gds', type=Path, required=True, help='Path to the marker GDS file')
+    parser.add_argument('--images', type=Path, required=True, help='Folder containing the PNG images')
+    parser.add_argument('--session',type=Path,default=Path(__file__).resolve().parent / 'aligned_images.lys',help='Session template; its image poses are ignored')
     parser.add_argument('--scale',type=float,help='Fixed calibrated microns/pixel; default: mean area-equivalent scale in session')
-    parser.add_argument('--output',type=Path,default=Path('output'))
+    parser.add_argument('--output', type=Path, default=Path('output'),
+                        help='Output folder (default: ./output in the current working directory)')
     args=parser.parse_args()
+    if not args.images.is_dir():
+        parser.error(f'Image folder does not exist: {args.images}')
+    if not args.gds.is_file():
+        parser.error(f'GDS file does not exist: {args.gds}')
     tree=ET.parse(args.session)
     reference={}
     for ann in tree.findall('.//annotation'):
@@ -202,7 +207,13 @@ def main():
     if annotations is None:raise ValueError('Session has no annotation container')
     for ann in list(annotations):
         if ann.findtext('class')=='img::Object':annotations.remove(ann)
-    tree.find('.//layout/file-path').text=str(args.gds.resolve())
+    layout = tree.find('.//layout')
+    original_name = layout.findtext('name')
+    layout.find('name').text = args.gds.name
+    layout.find('file-path').text = str(args.gds.resolve())
+    for ref in tree.findall('.//cellview/layout-ref'):
+        if ref.text == original_name:
+            ref.text = args.gds.name
     report=dict(scale_um_per_pixel=scale,images=[])
     files=sorted(args.images.glob('*.png'))
     if not files:raise ValueError(f'No PNG images in {args.images}')

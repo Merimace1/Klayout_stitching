@@ -9,10 +9,10 @@ The program was run and checked on both supplied images. The original GDS, image
 Requirements: Python 3.10+, KLayout on PATH with Python macro support, NumPy, SciPy, and Pillow. A separate `klayout` Python package, OpenCV, Tesseract, and downloaded recognition models are unnecessary.
 
 ```bash
-cd /home/merlin/Documents/school/Goettingen/code/klayout_stitching
+cd klayout_stitching
 # If the Python dependencies are missing:
 python3 -m pip install -r requirements.txt
-python3 align_images.py
+python3 align_images.py --images pictures --gds Marker_4x4_new.gds
 klayout -u output/aligned_auto.lys
 ```
 
@@ -23,6 +23,16 @@ Outputs:
 - `output/aligned_auto.lys`: GDS and automatically positioned images.
 - `output/Snap-20015_overlay.png` and `output/Snap-20016_overlay.png`: cyan GDS outlines over the original photographs, for inspection.
 - `output/alignment_report.json`: scale, rotation, image-center translation, transformation matrix, accepted marker coordinates, template scores, and fitting residuals.
+
+The `--images` folder and `--gds` file arguments are required. They may be absolute paths or paths relative to your current working directory. By default, output goes into `./output` in that directory; use `--output` to choose another location. The bundled session template is located relative to the script, so you can run it from any directory.
+
+For example, from another working directory:
+
+```bash
+python3 /path/to/klayout_stitching/align_images.py \
+  --images /path/to/pictures --gds /path/to/Marker_4x4_new.gds \
+  --output /path/to/results
+```
 
 Custom paths and calibrated scale:
 
