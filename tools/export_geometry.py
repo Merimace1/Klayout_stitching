@@ -1,18 +1,16 @@
-"""Run with klayout -b -r; paths are passed via environment variables."""
+"""Run with KLayout -b -r; all input paths come from environment variables."""
+
 import json
 import os
+from pathlib import Path
+import sys
 import pya
-layout = pya.Layout()
-layout.read(os.environ['ALIGN_GDS'])
-polygons = []
-for layer in layout.layer_indexes():
-    iterator = layout.top_cell().begin_shapes_rec(layer)
-    while not iterator.at_end():
-        shape = iterator.shape()
-        if shape.is_polygon() or shape.is_box():
-            polygon = shape.polygon if shape.is_polygon() else pya.Polygon(shape.box)
-            polygon = polygon.transformed(iterator.trans())
-            polygons.append([[p.x * layout.dbu, p.y * layout.dbu]
-                             for p in polygon.each_point_hull()])
-        iterator.next()
-json.dump(polygons, open(os.environ['ALIGN_GEOMETRY'], 'w'))
+
+sys.path.insert(0, str(Path(__file__).resolve().parents[1]))
+from gds_io import extract_layout
+
+data = extract_layout(
+    pya, Path(os.environ["ALIGN_GDS"]), os.environ.get("ALIGN_CELL") or None
+)
+with open(os.environ["ALIGN_GEOMETRY"], "w", encoding="utf-8") as output:
+    json.dump(data, output)

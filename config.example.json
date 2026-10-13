@@ -1,0 +1,13 @@
+{
+  "letter_height_um": null,
+  "square_size_um": null,
+  "target_letter_height_px": 12.3,
+  "background_sigma_px": 5.0,
+  "contrast_threshold": 15.0,
+  "label_score": 0.65,
+  "marker_score": 0.5,
+  "label_tolerance_um": 8.0,
+  "marker_tolerance_um": 4.0,
+  "marker_search_px": 6,
+  "polarity": "dark"
+}
