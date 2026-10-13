@@ -17,6 +17,8 @@ class AlignmentConfig:
     marker_tolerance_um: float = 4.0
     marker_search_px: int = 6
     polarity: str = "dark"
+    marker_type: str = "developed"
+    gold_marker_score: float = 0.4
     stitching_min_inliers: int = 5
     stitching_descriptor_ratio: float = 0.95
     stitching_threshold_px: float = 4.0
@@ -39,7 +41,10 @@ class AlignmentConfig:
         config = cls(**values)
         for field in fields(cls):
             value = getattr(config, field.name)
-            if field.name == "polarity":
+            if field.name == "marker_type":
+                if value not in ("developed", "gold"):
+                    raise ValueError("marker_type must be developed or gold")
+            elif field.name == "polarity":
                 if value not in ("dark", "bright"):
                     raise ValueError("polarity must be dark or bright")
             elif value is not None:
@@ -66,6 +71,7 @@ class AlignmentConfig:
             max(
                 config.label_score,
                 config.marker_score,
+                config.gold_marker_score,
                 config.stitching_min_gradient_score,
                 config.stitching_descriptor_ratio,
             )

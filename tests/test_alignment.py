@@ -1,9 +1,31 @@
 import unittest
 import numpy as np
-from align_images import rigid, fit_labels
+from pathlib import Path
+from PIL import Image
+from align_images import rigid, fit_labels, align_marker_image
+from alignment_config import AlignmentConfig
+from gds_io import load_geometry
 
 
 class AlignmentTest(unittest.TestCase):
+    def test_gold_photographs_anchor_to_expected_rows(self):
+        root = Path(__file__).resolve().parents[1]
+        folder = root / "new_examples" / "gold_markers"
+        if not all((folder / name).is_file() for name in ("1.jpg", "2.jpg", "3.jpg")):
+            self.skipTest("Optional gold photographs are not present")
+        polygons = load_geometry(root / "Marker_4x4_new.gds")["polygons"]
+        for name, rows in (("1.jpg", "DE"), ("2.jpg", "FG"), ("3.jpg", "FG")):
+            with self.subTest(image=name), Image.open(folder / name) as image:
+                pose = align_marker_image(
+                    image, polygons, 0.34484, AlignmentConfig(marker_type="gold"), True
+                )
+                self.assertGreaterEqual(len(pose["markers"]), 3)
+                self.assertTrue(all(m["label"][0] in rows for m in pose["markers"]))
+                self.assertLess(pose["marker_rms_um"], 2)
+                self.assertAlmostEqual(
+                    np.sqrt(np.linalg.det(pose["matrix"])), 0.353, delta=0.003
+                )
+
     def test_fixed_scale_rigid_transform(self):
         p = np.array([[0.0, 0.0], [100, 0], [0, 200], [150, 170]])
         angle = 0.13

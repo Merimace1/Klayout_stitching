@@ -58,6 +58,7 @@ Then run with `--klayout-executable`. Python 3.14 on Windows has not been tested
 | `--scale NUMBER` | Fixed µm/pixel for direct marker attempts; overlap registration can infer other images' scales |
 | `--scale-map FILE` | JSON map of individual image filenames to fixed calibrated µm/pixel |
 | `--scale-candidates LIST` | Comma-separated scale seeds for automatic magnification search |
+| `--marker-type developed\|gold` | Marker appearance; defaults to the existing developed detector |
 | `--no-stitch` | Disable overlap registration; save successful marker alignments |
 | `--session FILE` | Optional calibration session and numerical comparison reference |
 | `--klayout-executable FILE` | Use a particular desktop KLayout installation |
@@ -149,6 +150,20 @@ The examples cover approximately 0.68, 0.345, 0.070, and 0.035 µm/pixel. Source
 See `validation/multimag_results.json` for measured comparisons with the manual sessions. Some reference placements contain shear or perspective; full reference matrices are used for numerical validation, whereas generated placements remain similarities. Center differences for the eight photographs with reference placements are below 1.4 µm. Corner RMS differences range from 0.4 to 22.2 µm; the largest is Snap-20021, whose reference includes perspective deformation that a similarity cannot reproduce. These differences measure agreement with manual placement, not independent physical accuracy. The second-folder run aligns its four available files; the manual session2 also references images from the first folder.
 
 ## Validation
+
+For the supplied gold-marker photographs, run:
+
+```bash
+python3 align_images.py --gds Marker_4x4_new.gds \
+  --images new_examples/gold_markers --marker-type gold \
+  --scale-candidates 0.34484 --output output_gold
+```
+
+Gold mode uses bright red-channel contrast and fills small holes in the GDS label templates to account for the photographed gold lettering. It retains several similar label hypotheses for the existing geometric fit to disambiguate. Square-pair verification uses the existing search radius and a gold contrast threshold (`gold_marker_score`, default 0.4; developed mode retains `marker_score`, default 0.5). The same three-label/three-pair requirements and physical residual limits still apply. Developed mode retains the previous contrast, templates, and anchoring behavior; `polarity` controls developed mode only. The mode can also be set as `"marker_type": "gold"` in JSON; the CLI overrides it.
+
+`--scale-candidates` supplies a seed, allowing the marker fit and overlaps to estimate calibration. Use `--scale` to fix direct marker calibration. No reference placements were supplied for the gold photographs, so overlays and residuals establish internal consistency rather than independent absolute accuracy.
+
+This command aligns all five supplied gold images: `1.jpg`, `2.jpg`, and `3.jpg` anchor directly with 3, 6, and 6 verified pairs (RMS 0.521, 0.727, and 1.026 µm). `4.jpg` and `mid.jpg` register through `3.jpg`. The overview scales converge to 0.3528–0.3538 µm/pixel; `mid.jpg` converges to 0.07082 µm/pixel, indicating a smaller physical field than the other photographs.
 
 Fixed-scale marker-only mode retains the original supplied-example results:
 

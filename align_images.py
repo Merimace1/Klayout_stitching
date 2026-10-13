@@ -97,6 +97,11 @@ def label_library(polygons, scale, config=AlignmentConfig()):
                 fill=255,
             )
         template = nd.gaussian_filter(np.array(image, float), 0.7)
+        if config.marker_type == "gold":
+            # Bright gold closes small counters in the photographed lettering.
+            template = nd.gaussian_filter(
+                nd.binary_fill_holes(np.array(image) > 0).astype(float), 0.7
+            )
         template -= template.mean()
         template /= np.linalg.norm(template)
         library.append(
@@ -113,8 +118,11 @@ def label_library(polygons, scale, config=AlignmentConfig()):
 
 def detect(image, library, config=AlignmentConfig()):
     gray = np.array(image.convert("L"), float)
+    if config.marker_type == "gold":
+        # Red retains the gold signal without the green channel's bloom.
+        gray = np.array(image.convert("RGB"), float)[:, :, 0]
     contrast = (nd.gaussian_filter(gray, config.background_sigma_px) - gray) * (
-        1 if config.polarity == "dark" else -1
+        1 if config.marker_type == "developed" and config.polarity == "dark" else -1
     )
     components, _ = nd.label(
         nd.binary_dilation(
@@ -131,6 +139,7 @@ def detect(image, library, config=AlignmentConfig()):
         if min(x, y) < 24 or x > gray.shape[1] - 24 or y > gray.shape[0] - 24:
             continue
         best = (-1, None, None)
+        hypotheses = {}
         for dx, dy in itertools.product(range(-2, 3), repeat=2):
             patch = contrast[
                 y + dy - 20 : y + dy + 20, x + dx - 20 : x + dx + 20
@@ -138,10 +147,21 @@ def detect(image, library, config=AlignmentConfig()):
             patch -= patch.mean()
             patch /= max(np.linalg.norm(patch), 1)
             scores = np.einsum("ijk,jk->i", templates, patch)
+            if config.marker_type == "gold":
+                for k in np.argsort(scores)[-8:]:
+                    if scores[k] > hypotheses.get(int(k), (-1, None))[0]:
+                        hypotheses[int(k)] = (float(scores[k]), [x + dx, y + dy])
             k = int(scores.argmax())
             if scores[k] > best[0]:
                 best = (float(scores[k]), k, [x + dx, y + dy])
-        if best[0] > config.label_score:
+        if config.marker_type == "gold" and best[0] > config.label_score:
+            # Let the unchanged geometric fit disambiguate similar gold glyphs.
+            for k, (score, pixel) in sorted(
+                hypotheses.items(), key=lambda item: item[1][0], reverse=True
+            )[:8]:
+                if score >= best[0] - 0.12:
+                    detections.append(dict(score=score, index=k, pixel=pixel))
+        elif best[0] > config.label_score:
             detections.append(dict(score=best[0], index=best[1], pixel=best[2]))
     return detections, contrast
 
@@ -213,6 +233,11 @@ def refine_markers(
     points, targets, names, scores = [], [], [], []
     half = np.array(size) / 2
     search = config.marker_search_px
+    minimum_score = (
+        config.gold_marker_score
+        if config.marker_type == "gold"
+        else config.marker_score
+    )
     margin = 12 + search
     for entry in library:
         predicted = np.linalg.solve(matrix, entry["anchor"] - t) * [1, -1] + half
@@ -237,7 +262,7 @@ def refine_markers(
             score = float(np.sum(patch * template))
             if score > best[0]:
                 best = (score, [x + dx, y + dy])
-        if best[0] > config.marker_score:
+        if best[0] > minimum_score:
             points.append(best[1])
             targets.append(entry["anchor"])
             names.append(entry["name"])
@@ -377,6 +402,11 @@ def main():
     parser.add_argument("--cell", help="GDS top cell")
     parser.add_argument("--config", type=Path, help="JSON recognition parameters")
     parser.add_argument(
+        "--marker-type",
+        choices=("developed", "gold"),
+        help="Marker appearance (default: developed, or value in --config)",
+    )
+    parser.add_argument(
         "--no-stitch", action="store_true", help="Use marker alignment only"
     )
     args = parser.parse_args()
@@ -386,6 +416,10 @@ def main():
         if not args.gds.is_file():
             raise ValueError(f"GDS file does not exist: {args.gds}")
         config = AlignmentConfig.from_file(args.config)
+        if args.marker_type:
+            from dataclasses import replace
+
+            config = replace(config, marker_type=args.marker_type)
         calibration = args.session
         if calibration is None and args.scale is None:
             bundled = Path(__file__).resolve().parent / "aligned_images.lys"
