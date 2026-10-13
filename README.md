@@ -2,6 +2,13 @@
 
 Align mixed-magnification microscope photographs to a GDS marker grid. Images with enough readable labels anchor directly to the GDS; other images register through overlapping surface features in those anchors or intermediate photographs. The output uses rotation, translation, and a uniform pixel scale, with no shear or perspective warp. Smaller physical fields are placed on top of larger ones.
 
+# How to use
+
+- the code does not do a great job of scaling the images that it uses as anchors, therefore, it is recommended to use --scale-candidates (for 5x its ~ 0.68 um/pixel and for 10x its ~0.34 um/pixel)
+- the programme needs recognizable letters to anchor first few images, thus letters need to be clearly recognizable from the pictures
+- from my experience using 5x magnification images as anchors works the best
+- most of the testing was done on developed markers, thus it is assumed it works better for developed marker system 
+
 ## Install and run
 
 Python 3.10 or later:
