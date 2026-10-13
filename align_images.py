@@ -6,7 +6,6 @@ import itertools
 import json
 from pathlib import Path
 import xml.etree.ElementTree as ET
-from dataclasses import asdict
 
 import numpy as np
 from PIL import Image, ImageDraw
@@ -15,7 +14,7 @@ from scipy.spatial import cKDTree
 
 from alignment_config import AlignmentConfig
 from gds_io import load_geometry
-from session_io import build_session, reference_matrices, image_annotation
+from session_io import reference_matrices, reference_projective_matrices
 
 
 def infer_dimensions(polygons, config):
@@ -158,7 +157,12 @@ def rigid(p, q, scale):
     return matrix, b - matrix @ a
 
 
-def fit_labels(detections, library, size, scale, config=AlignmentConfig()):
+def fit_labels(
+    detections, library, size, scale, config=AlignmentConfig(), estimate_scale=False
+):
+    from stitching import similarity
+
+    fit = (lambda p, q, scale: similarity(p, q)) if estimate_scale else rigid
     if len(detections) < 3:
         raise ValueError(
             "Fewer than three recognizable labels; refusing an ambiguous alignment"
@@ -168,9 +172,9 @@ def fit_labels(detections, library, size, scale, config=AlignmentConfig()):
     q = np.array([library[d["index"]]["center"] for d in detections])
     best = None
     for i, j in itertools.combinations(range(len(p)), 2):
-        if np.linalg.norm(p[i] - p[j]) < 100:
+        if np.linalg.norm(p[i] - p[j]) < 100 or np.linalg.norm(q[i] - q[j]) < 1:
             continue
-        matrix, t = rigid(p[[i, j]], q[[i, j]], scale)
+        matrix, t = fit(p[[i, j]], q[[i, j]], scale)
         errors = np.linalg.norm(p @ matrix.T + t - q, axis=1)
         good = errors < config.label_tolerance_um
         rank = (
@@ -187,13 +191,25 @@ def fit_labels(detections, library, size, scale, config=AlignmentConfig()):
             raise ValueError(
                 "Too few consistent correspondences remain after refinement"
             )
-        matrix, t = rigid(p[good], q[good], scale)
+        matrix, t = fit(p[good], q[good], scale)
         good = np.linalg.norm(p @ matrix.T + t - q, axis=1) < config.label_tolerance_um
     return matrix, t, good
 
 
-def refine_markers(matrix, t, contrast, library, size, scale, config=AlignmentConfig()):
+def refine_markers(
+    matrix,
+    t,
+    contrast,
+    library,
+    size,
+    scale,
+    config=AlignmentConfig(),
+    estimate_scale=False,
+):
     """Locate the actual square pairs, using the recognized grid as an initial pose."""
+    from stitching import similarity
+
+    fit = (lambda p, q, scale: similarity(p, q)) if estimate_scale else rigid
     points, targets, names, scores = [], [], [], []
     half = np.array(size) / 2
     search = config.marker_search_px
@@ -236,7 +252,7 @@ def refine_markers(matrix, t, contrast, library, size, scale, config=AlignmentCo
             raise ValueError(
                 "Too few consistent correspondences remain after refinement"
             )
-        matrix, t = rigid(p[good], q[good], scale)
+        matrix, t = fit(p[good], q[good], scale)
         errors = np.linalg.norm(p @ matrix.T + t - q, axis=1)
         good = errors < config.marker_tolerance_um
     if good.sum() < 3:
@@ -275,7 +291,60 @@ def preview(image, polygons, matrix, t, path):
     out.save(path)
 
 
+def align_marker_image(image, polygons, scale, config, estimate_scale=False):
+    """Attempt marker alignment at one candidate physical pixel scale."""
+    letter_height, _ = infer_dimensions(polygons, config)
+    ratio = scale / (letter_height / config.target_letter_height_px)
+    if abs(ratio - 1) < 0.02:
+        ratio = 1.0
+    working_scale = scale / ratio
+    library = label_library(polygons, working_scale, config)
+    working = image
+    if ratio != 1:
+        working = image.resize(
+            (max(1, round(image.width * ratio)), max(1, round(image.height * ratio))),
+            getattr(Image, "Resampling", Image).LANCZOS,
+        )
+    detections, contrast = detect(working, library, config)
+    matrix, translation, inliers = fit_labels(
+        detections,
+        library,
+        working.size,
+        working_scale,
+        config,
+        estimate_scale=estimate_scale,
+    )
+    inferred = float(np.sqrt(np.linalg.det(matrix)))
+    if estimate_scale and not 0.75 <= inferred / working_scale <= 1.33:
+        raise ValueError(
+            "Recognized labels imply a scale inconsistent with their pixel size"
+        )
+    matrix, translation, marks = refine_markers(
+        matrix,
+        translation,
+        contrast,
+        library,
+        working.size,
+        working_scale,
+        config,
+        estimate_scale=estimate_scale,
+    )
+    matrix *= ratio
+    for mark in marks:
+        centered = (np.array(mark["pixel"]) - np.array(working.size) / 2) / ratio
+        mark["pixel"] = (centered + np.array(image.size) / 2).tolist()
+    return dict(
+        matrix=matrix,
+        translation=translation,
+        markers=marks,
+        recognized_label_inliers=int(inliers.sum()),
+        marker_rms_um=float(np.sqrt(np.mean([m["residual_um"] ** 2 for m in marks]))),
+    )
+
+
 def main():
+    from batch_alignment import align_batch, write_outputs
+
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument("--gds", type=Path, required=True, help="Marker GDS file")
     parser.add_argument("--images", type=Path, required=True, help="Image folder")
@@ -285,21 +354,30 @@ def main():
         default=Path("output"),
         help="Output folder (default: ./output)",
     )
-    parser.add_argument("--scale", type=float, help="Fixed microns/pixel calibration")
     parser.add_argument(
-        "--session", type=Path, help="Optional calibration/reference session"
+        "--scale",
+        type=float,
+        help="Fixed marker calibration for all inputs; stitching can infer other magnifications",
     )
     parser.add_argument(
-        "--klayout-executable",
-        help="Desktop KLayout executable path; overrides Python backend",
-    )
-    parser.add_argument(
-        "--cell", help="GDS top cell (required when the GDS has multiple top cells)"
-    )
-    parser.add_argument(
-        "--config",
+        "--scale-map",
         type=Path,
-        help="JSON recognition parameters; see config.example.json",
+        help="JSON map of image filename to calibrated microns/pixel",
+    )
+    parser.add_argument(
+        "--scale-candidates",
+        help="Comma-separated candidate microns/pixel for automatic marker search",
+    )
+    parser.add_argument(
+        "--session",
+        type=Path,
+        help="Calibration/reference session; poses are used only for comparison",
+    )
+    parser.add_argument("--klayout-executable", help="Desktop KLayout executable path")
+    parser.add_argument("--cell", help="GDS top cell")
+    parser.add_argument("--config", type=Path, help="JSON recognition parameters")
+    parser.add_argument(
+        "--no-stitch", action="store_true", help="Use marker alignment only"
     )
     args = parser.parse_args()
     try:
@@ -308,24 +386,58 @@ def main():
         if not args.gds.is_file():
             raise ValueError(f"GDS file does not exist: {args.gds}")
         config = AlignmentConfig.from_file(args.config)
-        # Preserve convenient calibration for the supplied example, but allow
-        # operation with no example session at all when --scale is supplied.
         calibration = args.session
         if calibration is None and args.scale is None:
-            calibration = Path(__file__).resolve().parent / "aligned_images.lys"
-        reference = reference_matrices(ET.parse(calibration) if calibration else None)
-        scales = [np.sqrt(abs(np.linalg.det(m[:, :2]))) for m in reference.values()]
-        scale = (
-            args.scale
-            if args.scale is not None
-            else float(np.mean(scales))
-            if scales
-            else None
+            bundled = Path(__file__).resolve().parent / "aligned_images.lys"
+            if bundled.is_file():
+                calibration = bundled
+        calibration_tree = ET.parse(calibration) if calibration else None
+        reference = reference_matrices(calibration_tree)
+        comparison_reference = reference_projective_matrices(calibration_tree)
+        scales = [
+            float(np.sqrt(abs(np.linalg.det(m[:, :2])))) for m in reference.values()
+        ]
+        scale_map = (
+            json.loads(args.scale_map.read_text(encoding="utf-8"))
+            if args.scale_map
+            else {}
         )
-        if scale is None or not np.isfinite(scale) or scale <= 0:
-            raise ValueError(
-                "Provide a positive --scale, or a --session with calibrated image matrices"
+        if not isinstance(scale_map, dict):
+            raise ValueError("--scale-map must contain a JSON object")
+        for name, scale in scale_map.items():
+            if (
+                not isinstance(scale, (int, float))
+                or not np.isfinite(scale)
+                or scale <= 0
+            ):
+                raise ValueError(f"Invalid calibration for {name}")
+        if args.scale_candidates:
+            candidates = [float(value) for value in args.scale_candidates.split(",")]
+        elif args.scale is not None:
+            candidates = [args.scale]
+        elif scales:
+            # Use the widest reference field as the overview calibration;
+            # averaging all magnifications would be physically meaningless.
+            base = max(scales)
+            candidates = (
+                [base]
+                + sorted(scales, reverse=True)
+                + [base * 2 ** (step / 2) for step in range(-1, -9, -1)]
+                + [base * np.sqrt(2), base * 2]
             )
+        elif scale_map:
+            candidates = list(scale_map.values())
+        else:
+            raise ValueError(
+                "Provide --scale, --scale-candidates, --scale-map, or a calibration --session"
+            )
+        if not candidates or any(not np.isfinite(v) or v <= 0 for v in candidates):
+            raise ValueError("Pixel scale candidates must be positive finite values")
+        distinct = []
+        for value in candidates:
+            if all(abs(np.log(value / old)) > 0.01 for old in distinct):
+                distinct.append(value)
+        candidates = distinct
         files = sorted(
             p
             for p in args.images.iterdir()
@@ -335,105 +447,44 @@ def main():
         if not files:
             raise ValueError(f"No supported images in {args.images}")
         data = load_geometry(args.gds, args.klayout_executable, args.cell)
-        polygons = data["polygons"]
-        letter_height, square_size = infer_dimensions(polygons, config)
-        # Normalize sampling, not physical geometry: matching windows retain
-        # their meaning across acquisition magnifications and design sizes.
-        normalized_scale = letter_height / config.target_letter_height_px
-        resize_ratio = scale / normalized_scale
-        if abs(resize_ratio - 1) < 0.02:
-            resize_ratio = 1.0
-        working_scale = scale / resize_ratio
-        library = label_library(polygons, working_scale, config)
-        tree = build_session(args.gds, data["cell"], polygons, data["layers"])
-        annotations = tree.find(".//view/annotations")
         args.output.mkdir(parents=True, exist_ok=True)
+        images, poses, failures = align_batch(
+            files,
+            data["polygons"],
+            candidates,
+            config,
+            align_marker_image,
+            scale_map,
+            estimate_scale=args.scale is None,
+            stitch=not args.no_stitch,
+        )
+        write_outputs(
+            files,
+            images,
+            poses,
+            failures,
+            data,
+            args.gds,
+            args.output,
+            config,
+            comparison_reference,
+            preview,
+            candidates,
+        )
     except (ValueError, RuntimeError, OSError, ET.ParseError) as error:
         parser.error(str(error))
-    report = dict(
-        scale_um_per_pixel=scale,
-        geometry_backend=data["backend"],
-        cell=data["cell"],
-        letter_height_um=letter_height,
-        square_size_um=square_size,
-        config=asdict(config),
-        images=[],
+    print(
+        f"Aligned {len(poses)}/{len(files)} images; {len(failures)} unresolved. Session: {args.output / 'aligned_auto.lys'}",
+        flush=True,
     )
-    for z, path in enumerate(files, 1):
-        try:
-            image = Image.open(path)
-            image.load()
-        except OSError as error:
-            parser.error(f"Cannot read image {path}: {error}")
-        working = image
-        if resize_ratio != 1.0:
-            # A tiny dimension-rounding difference remains below one working pixel.
-            working = image.resize(
-                (
-                    max(1, round(image.width * resize_ratio)),
-                    max(1, round(image.height * resize_ratio)),
-                ),
-                getattr(Image, "Resampling", Image).LANCZOS,
-            )
-        try:
-            detections, contrast = detect(working, library, config)
-            matrix, t, inliers = fit_labels(
-                detections, library, working.size, working_scale, config
-            )
-            matrix, t, marks = refine_markers(
-                matrix, t, contrast, library, working.size, working_scale, config
-            )
-        except ValueError as error:
-            parser.error(
-                f"{path.name}: {error}. Check --scale and recognition settings in --config"
-            )
-        matrix *= resize_ratio
-        for mark in marks:
-            centered = (
-                np.array(mark["pixel"]) - np.array(working.size) / 2
-            ) / resize_ratio
-            mark["pixel"] = (centered + np.array(image.size) / 2).tolist()
-        result = dict(
-            file=path.name,
-            rotation_deg=float(np.degrees(np.arctan2(matrix[1, 0], matrix[0, 0]))),
-            translation_um=t.tolist(),
-            matrix=np.column_stack([matrix, t]).tolist(),
-            recognized_label_inliers=int(inliers.sum()),
-            markers=marks,
-            marker_rms_um=float(
-                np.sqrt(np.mean([m["residual_um"] ** 2 for m in marks]))
-            ),
+    if not poses:
+        parser.exit(
+            2, "No image could be anchored to the GDS; see alignment_report.json.\n"
         )
-        if path.name in reference:
-            corners = np.array(
-                list(
-                    itertools.product(
-                        [-image.width / 2, image.width / 2],
-                        [-image.height / 2, image.height / 2],
-                    )
-                )
-            )
-            ref = reference[path.name]
-            differences = corners @ matrix.T + t - (corners @ ref[:, :2].T + ref[:, 2])
-            result["example_corner_rms_um"] = float(
-                np.sqrt(np.mean(np.sum(differences**2, axis=1)))
-            )
-            result["example_center_difference_um"] = float(
-                np.linalg.norm(t - ref[:, 2])
-            )
-        report["images"].append(result)
-        ann = ET.SubElement(annotations, "annotation")
-        ET.SubElement(ann, "class").text = "img::Object"
-        ET.SubElement(ann, "value").text = image_annotation(path, matrix, t, z)
-        preview(image, polygons, matrix, t, args.output / (path.stem + "_overlay.png"))
-        print(
-            f"{path.name}: {len(marks)} markers, RMS {result['marker_rms_um']:.3f} um, rotation {result['rotation_deg']:.3f} deg",
-            flush=True,
+    if failures:
+        parser.exit(
+            1, "Some images remain unresolved; successful alignments were saved.\n"
         )
-    tree.write(args.output / "aligned_auto.lys", encoding="utf-8", xml_declaration=True)
-    (args.output / "alignment_report.json").write_text(
-        json.dumps(report, indent=2) + "\n"
-    )
 
 
 if __name__ == "__main__":

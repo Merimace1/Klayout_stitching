@@ -17,6 +17,14 @@ class AlignmentConfig:
     marker_tolerance_um: float = 4.0
     marker_search_px: int = 6
     polarity: str = "dark"
+    stitching_min_inliers: int = 5
+    stitching_descriptor_ratio: float = 0.95
+    stitching_threshold_px: float = 4.0
+    stitching_sparse_threshold_px: float = 12.0
+    stitching_min_gradient_score: float = 0.25
+    stitching_feature_levels: int = 9
+    stitching_features_per_level: int = 450
+    stitching_max_dimension: int = 1600
 
     @classmethod
     def from_file(cls, path):
@@ -43,8 +51,25 @@ class AlignmentConfig:
                     or value <= 0
                 ):
                     raise ValueError(f"{field.name} must be a positive finite number")
-        if not isinstance(config.marker_search_px, int):
-            raise ValueError("marker_search_px must be an integer")
-        if max(config.label_score, config.marker_score) > 1:
+        for name in (
+            "marker_search_px",
+            "stitching_min_inliers",
+            "stitching_feature_levels",
+            "stitching_features_per_level",
+            "stitching_max_dimension",
+        ):
+            if not isinstance(getattr(config, name), int):
+                raise ValueError(f"{name} must be an integer")
+        if config.stitching_min_inliers < 4:
+            raise ValueError("stitching_min_inliers must be at least 4")
+        if (
+            max(
+                config.label_score,
+                config.marker_score,
+                config.stitching_min_gradient_score,
+                config.stitching_descriptor_ratio,
+            )
+            > 1
+        ):
             raise ValueError("Correlation score thresholds cannot exceed 1")
         return config

@@ -1,0 +1,231 @@
+{
+  "description": "Real mixed-magnification images; reference matrices used only for comparison, including projective denominators.",
+  "datasets": [
+    {
+      "input_folder": "pictures",
+      "aligned": 5,
+      "unresolved": [],
+      "draw_order_large_to_small": [
+        "Snap-20016.png",
+        "Snap-20015.png",
+        "Snap-20014.png",
+        "Snap-20012.png",
+        "Snap-20013.png"
+      ],
+      "images": [
+        {
+          "file": "Snap-20016.png",
+          "method": "markers",
+          "anchor": "Snap-20016.png",
+          "depth": 0,
+          "scale_um_per_pixel": 0.6833899659514089,
+          "rotation_deg": -2.378379314723672,
+          "translation_um": [
+            423.7109785958929,
+            1082.8869078111197
+          ],
+          "recognized_label_inliers": 10,
+          "marker_rms_um": 1.716447636033554,
+          "example_center_difference_um": 0.710139721993368,
+          "example_corner_rms_um": 7.796267176812652,
+          "physical_area_um2": 2295505.775311591,
+          "z_position": 1
+        },
+        {
+          "file": "Snap-20015.png",
+          "method": "markers",
+          "anchor": "Snap-20015.png",
+          "depth": 0,
+          "scale_um_per_pixel": 0.6833253899834449,
+          "rotation_deg": -2.3280566502714173,
+          "translation_um": [
+            -876.5905932310069,
+            1142.616959080478
+          ],
+          "recognized_label_inliers": 9,
+          "marker_rms_um": 0.8733189922003912,
+          "example_center_difference_um": 0.6704112277057551,
+          "example_corner_rms_um": 1.7377456248637704,
+          "physical_area_um2": 2295071.974667193,
+          "z_position": 2
+        },
+        {
+          "file": "Snap-20014.png",
+          "method": "stitching",
+          "parent": "Snap-20015.png",
+          "anchor": "Snap-20015.png",
+          "depth": 1,
+          "scale_um_per_pixel": 0.3449198996113123,
+          "rotation_deg": -2.388681065314506,
+          "translation_um": [
+            -261.62674947843334,
+            1534.438796591909
+          ],
+          "registration": {
+            "inliers": 49,
+            "matches": 154,
+            "rms_px": 2.217780953613997,
+            "source_spread": 0.2865009032845883,
+            "target_spread": 0.0731200935563538,
+            "gradient_score": 0.8997953952292014,
+            "overlap_fraction": 0.6966,
+            "limited_features": false
+          },
+          "example_center_difference_um": 0.28448307388176386,
+          "example_corner_rms_um": 1.4071827983970782,
+          "physical_area_um2": 584760.0520292488,
+          "z_position": 3
+        },
+        {
+          "file": "Snap-20012.png",
+          "method": "stitching",
+          "parent": "Snap-20014.png",
+          "anchor": "Snap-20015.png",
+          "depth": 2,
+          "scale_um_per_pixel": 0.07001970810883422,
+          "rotation_deg": -2.3424038741476356,
+          "translation_um": [
+            -276.37609555726823,
+            1562.6804714311609
+          ],
+          "registration": {
+            "inliers": 5,
+            "matches": 39,
+            "rms_px": 1.4878896253094904,
+            "source_spread": 0.09032699874007158,
+            "target_spread": 0.003754427083333341,
+            "gradient_score": 0.5468307939969801,
+            "overlap_fraction": 1.0,
+            "refined": true,
+            "limited_features": true
+          },
+          "example_center_difference_um": 0.07546154307225679,
+          "example_corner_rms_um": 0.4128190116201933,
+          "physical_area_um2": 24098.043610626508,
+          "z_position": 4
+        },
+        {
+          "file": "Snap-20013.png",
+          "method": "stitching",
+          "parent": "Snap-20012.png",
+          "anchor": "Snap-20015.png",
+          "depth": 3,
+          "scale_um_per_pixel": 0.034807927753204244,
+          "rotation_deg": -2.393752464515891,
+          "translation_um": [
+            -275.76375038144454,
+            1559.5667010949921
+          ],
+          "registration": {
+            "inliers": 12,
+            "matches": 32,
+            "rms_px": 1.427273954707798,
+            "source_spread": 0.33460817297032575,
+            "target_spread": 0.0827135904495897,
+            "gradient_score": 0.33043949531022404,
+            "overlap_fraction": 1.0,
+            "refined": true,
+            "limited_features": false
+          },
+          "physical_area_um2": 5955.216184798181,
+          "z_position": 5
+        }
+      ]
+    },
+    {
+      "input_folder": "pictures2",
+      "aligned": 4,
+      "unresolved": [],
+      "draw_order_large_to_small": [
+        "Snap-20021.png",
+        "Snap-20020.png",
+        "Snap-20019.png",
+        "Snap-20018.png"
+      ],
+      "images": [
+        {
+          "file": "Snap-20021.png",
+          "method": "markers",
+          "anchor": "Snap-20021.png",
+          "depth": 0,
+          "scale_um_per_pixel": 0.6855296759230217,
+          "rotation_deg": -3.807997756285868,
+          "translation_um": [
+            296.841388592621,
+            -108.78079052259407
+          ],
+          "recognized_label_inliers": 10,
+          "marker_rms_um": 2.3585979073127534,
+          "example_center_difference_um": 1.2366658322182662,
+          "example_corner_rms_um": 22.221309482387326,
+          "physical_area_um2": 2309902.8434343846,
+          "z_position": 1
+        },
+        {
+          "file": "Snap-20020.png",
+          "method": "markers",
+          "anchor": "Snap-20020.png",
+          "depth": 0,
+          "scale_um_per_pixel": 0.6844854561871968,
+          "rotation_deg": -3.809333865976639,
+          "translation_um": [
+            -239.9421391412621,
+            324.8731014654992
+          ],
+          "recognized_label_inliers": 9,
+          "marker_rms_um": 1.5468903779336518,
+          "example_center_difference_um": 1.3581507694754371,
+          "example_corner_rms_um": 1.790232496463539,
+          "physical_area_um2": 2302871.1738497186,
+          "z_position": 2
+        },
+        {
+          "file": "Snap-20019.png",
+          "method": "markers",
+          "anchor": "Snap-20019.png",
+          "depth": 0,
+          "scale_um_per_pixel": 0.3464509010230129,
+          "rotation_deg": -3.8079106225317503,
+          "translation_um": [
+            211.65099902716972,
+            99.00423281006128
+          ],
+          "recognized_label_inliers": 4,
+          "marker_rms_um": 0.6037823914503223,
+          "example_center_difference_um": 0.5585766152642571,
+          "example_corner_rms_um": 1.3285687561016288,
+          "physical_area_um2": 589962.7404639805,
+          "z_position": 3
+        },
+        {
+          "file": "Snap-20018.png",
+          "method": "stitching",
+          "parent": "Snap-20019.png",
+          "anchor": "Snap-20019.png",
+          "depth": 1,
+          "scale_um_per_pixel": 0.0702076244683042,
+          "rotation_deg": -3.767513286803667,
+          "translation_um": [
+            209.54096196824776,
+            63.65806786378918
+          ],
+          "registration": {
+            "inliers": 6,
+            "matches": 27,
+            "rms_px": 6.755098094840362,
+            "source_spread": 0.012024999999999994,
+            "target_spread": 0.0003763503282352226,
+            "gradient_score": 0.27976661399596675,
+            "overlap_fraction": 1.0,
+            "refined": true,
+            "limited_features": true
+          },
+          "example_center_difference_um": 1.39229907790401,
+          "example_corner_rms_um": 1.508055476366356,
+          "physical_area_um2": 24227.564094172816,
+          "z_position": 4
+        }
+      ]
+    }
+  ]
+}

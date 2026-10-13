@@ -85,3 +85,23 @@ def image_annotation(path, matrix, translation, z):
         "gamma=1;red_gain=1;green_gain=1;blue_gain=1;landmarks=[];"
         f"color_mapping=[0,'#000000';1,'#ffffff';];file='{filename}'"
     )
+
+
+def reference_projective_matrices(tree):
+    """Full matrices for validation; never used as alignment initializations."""
+    result = {}
+    if tree is None:
+        return result
+    for annotation in tree.findall(".//annotation"):
+        if annotation.findtext("class") != "img::Object":
+            continue
+        value = annotation.findtext("value", "")
+        rows = re.search(r"matrix=\((.*?)\) \((.*?)\) \((.*?)\)", value)
+        filename = re.search(r"file='([^']+)'", value)
+        if rows and filename:
+            matrix = np.array(
+                [list(map(float, rows.group(i).split(","))) for i in (1, 2, 3)]
+            )
+            if matrix.shape == (3, 3):
+                result[PureWindowsPath(filename.group(1)).name] = matrix
+    return result
